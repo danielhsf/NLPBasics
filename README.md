@@ -1,2 +1,2 @@
 # NLPBasics
-Basic scripts involving tasks in Natural Language Processing 
+Tarefas clássicas em Processamento de Linguagem Natural com intuito de revisar conceitos básicos
