@@ -1,7 +1,9 @@
 
+import re
 import math
-from collections import Counter
 import numpy as np
+from collections import Counter
+from tfidf_corpus import *
 
 
 class TFIDFRetriever:
@@ -12,13 +14,10 @@ class TFIDFRetriever:
 
     def retrieve(self, query, top_k=2):
         preproc_query = self.tfidf.preprocess([query])[0]
-        print(preproc_query)
 
         vector = np.zeros([1, len(self.tfidf.vocab)])
         for term in preproc_query:
-            print(f"Checking if {term} in vocab...")
             if term in self.tfidf.vocab:
-                print(f"Term  {term} is in vocab, doing the math")
                 tfidf_term = self.tfidf.compute_tf(
                     term, preproc_query) * self.tfidf.idf[term]
                 term_index = self.tfidf.tokenize[term]
@@ -54,6 +53,7 @@ class TFIDFRetriever:
 class TFIDF:
 
     def __init__(self, corpus):
+        self.token_pattern = r'\b\w+\b'
         self.corpus = self.preprocess(corpus)
         self.vocab, self.tokenize = self.build_vocab(self.corpus)
         self.bow = self.build_bow()
@@ -69,8 +69,8 @@ class TFIDF:
     def preprocess(self, corpus):
         preprocessed_corpus = []
         for document in corpus:
-            document = document.lower().split()
-            preprocessed_corpus.append(document)
+            preprocessed_corpus.append(
+                re.findall(self.token_pattern, document.lower()))
         return preprocessed_corpus
 
     def build_vocab(self, preprocessed_corpus):
@@ -93,7 +93,10 @@ class TFIDF:
                 count_term += 1
             total_words += 1
 
-        return count_term/total_words
+        if count_term == 0:
+            return 0
+        else:
+            return 1 + math.log10(count_term)
 
     def compute_df(self):
         df = Counter()
@@ -111,7 +114,7 @@ class TFIDF:
         N = len(self.corpus)
 
         for term, freq in df.items():
-            idf[term] = math.log(N/(freq+1))
+            idf[term] = math.log10(N/(df[term]))
 
         return idf
 
@@ -129,16 +132,7 @@ class TFIDF:
 
 
 if __name__ == "__main__":
-    corpus = ["gatos gostam de leite",
-              "gatos gostam de peixe",
-              "cachorros gostam de ossos",
-              "cachorros gostam de brincar",
-              "gatos e cachorros podem ser amigos",
-              "leite é bom para gatos",
-              "peixe é comida de gato",
-              "ossos são comida de cachorro",
-              "animais gostam de comida",
-              "gatos e cachorros gostam de comida"]
+    corpus = dataset_IR_v1
 
     tfidf = TFIDF(corpus)
 
