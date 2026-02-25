@@ -16,22 +16,31 @@ class TFIDFRetriever:
         preproc_query = self.tfidf.preprocess([query])[0]
 
         vector = np.zeros([1, len(self.tfidf.vocab)])
+        candidate_doc_ids = set()
         for term in preproc_query:
             if term in self.tfidf.vocab:
                 tfidf_term = self.tfidf.compute_tf(
                     term, preproc_query) * self.tfidf.idf[term]
                 term_index = self.tfidf.tokenize[term]
                 vector[0, term_index] = tfidf_term
+                candidate_doc_ids.update(
+                    self.tfidf.inverted_index.get(term, []))
 
-        similarities = self.cosine_similarity(vector, self.tfidf.bow.T)[0]
+        if not candidate_doc_ids:
+            return []
+
+        candidate_ids = list(candidate_doc_ids)
+        candidate_bow = self.tfidf.bow[candidate_ids]
+        similarities = self.cosine_similarity(vector, candidate_bow.T)[0]
 
         idx = np.argsort(similarities)
 
         answers = []
-        for i in range(top_k):
+        for i in range(min(top_k, len(candidate_ids))):
+            doc_id = candidate_ids[idx[-(i + 1)]]
             answers.append(
-                (" ".join(self.tfidf.corpus[idx[-(i+1)]]),
-                 similarities[idx[-(i+1)]]))
+                (" ".join(self.tfidf.corpus[doc_id]),
+                 similarities[idx[-(i + 1)]]))
 
         return answers
 
@@ -57,6 +66,16 @@ class TFIDF:
         self.corpus = self.preprocess(corpus)
         self.vocab, self.tokenize = self.build_vocab(self.corpus)
         self.bow = self.build_bow()
+        self.inverted_index = self.build_inverted_index()
+
+    def build_inverted_index(self):
+        inverted_index = {}
+        for doc_id, document in enumerate(self.corpus):
+            for term in set(document):
+                if term not in inverted_index:
+                    inverted_index[term] = []
+                inverted_index[term].append(doc_id)
+        return inverted_index
 
     def build_bow(self):
         M = len(self.corpus)
