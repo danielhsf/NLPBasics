@@ -21,8 +21,9 @@ The local virtualenvs `nlp_env/` and `.venv/` are gitignored. Dependencies are d
 ## Running Code
 
 ```bash
-# Run a module script directly
-uv run python information_retrieval/tfidf.py
+# Run a retriever script directly (from repo root)
+uv run python information_retrieval/tfidf_retriever.py
+uv run python information_retrieval/bm25_retriever.py
 
 # Launch Jupyter for notebooks
 uv run jupyter notebook
@@ -36,16 +37,29 @@ Each NLP topic lives in its own directory. Currently only `information_retrieval
 
 ### `information_retrieval/`
 
-- **`tfidf_corpus.py`** — Sample corpora used as input data (e.g., `dataset_IR_v1`, `dataset_tfidf_v1`).
-- **`tfidf.py`** — Core implementation. Contains two classes:
-  - `TFIDF`: Builds vocab, BoW matrix, inverted index, and computes TF (log-normalized), IDF, and TF-IDF scores.
-  - `TFIDFRetriever`: Wraps `TFIDF` to perform query retrieval using the inverted index for candidate filtering, then ranks by cosine similarity.
-- **`cosinse_sim.py`** — Standalone cosine similarity prototype (exploratory script, not imported elsewhere).
+Class hierarchy:
+
+```
+BaseRetriever (ABC)       ← template method for retrieve()
+    ├── TFIDFRetriever    ← TF×IDF scoring
+    └── BM25Retriever     ← Okapi BM25 scoring
+
+CorpusIndex               ← composed into BaseRetriever (not a base class)
+```
+
+Files:
+
+- **`corpus.py`** — Sample corpora (`dataset_IR_v1`, `dataset_tfidf_v1`, `query_tfidf_v1`).
+- **`index.py`** — `CorpusIndex`: preprocessing, sorted vocab, raw count matrix, inverted index. No scoring logic.
+- **`base_retriever.py`** — `BaseRetriever(ABC)`: builds `CorpusIndex`, owns `retrieve()` template and `_cosine_similarity()`.
+- **`tfidf_retriever.py`** — `TFIDFRetriever`: implements log-normalized TF × IDF scoring.
+- **`bm25_retriever.py`** — `BM25Retriever`: implements Okapi BM25 scoring (k1=1.5, b=0.75 defaults).
+- **`cosinse_sim.py`** — Standalone cosine similarity prototype (exploratory, not imported elsewhere).
 - **`IR Notebook.ipynb`** — Interactive notebook for experiments.
 
-The retrieval pipeline: `corpus → TFIDF (preprocess → build_vocab → build_bow → build_inverted_index → compute_tfidf_with_bow) → TFIDFRetriever.retrieve(query)`.
+Retrieval pipeline: `corpus → BaseRetriever.__init__ (CorpusIndex → build_score_matrix) → retrieve(query)`.
 
-Imports within `information_retrieval/` use bare module names (e.g., `from tfidf_corpus import *`), so scripts must be run from within that directory or with the path adjusted.
+Imports within `information_retrieval/` use bare module names, so scripts must be run from within that directory or with the path adjusted.
 
 ## Adding New Modules
 
