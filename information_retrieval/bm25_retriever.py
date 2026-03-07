@@ -34,7 +34,7 @@ class BM25Retriever(BaseRetriever):
         for doc_id in range(M):
             doc_len = len(self.index.preprocessed[doc_id])
             for term in set(self.index.preprocessed[doc_id]):
-                term_index = self.index.tokenize[term]
+                term_index = self.index.tokens[term]
                 f = float(self.index.count_matrix[doc_id, term_index])
                 numerator = f * (self.k1 + 1)
                 denominator = f + self.k1 * (1 - self.b + self.b * doc_len / avgdl)
@@ -46,15 +46,15 @@ class BM25Retriever(BaseRetriever):
         """Binary query vector: 1.0 for each term present in the vocabulary."""
         vector = np.zeros([1, self.index.n_vocab])
         for term in tokens:
-            if term in self.index.tokenize:
-                vector[0, self.index.tokenize[term]] = 1.0
+            if term in self.index.tokens:
+                vector[0, self.index.tokens[term]] = 1.0
         return vector
 
     def _compute_idf_bm25(self) -> dict[str, float]:
         """BM25 IDF = log((N - df + 0.5) / (df + 0.5) + 1)."""
         N = self.index.n_docs
         idf = {}
-        for term in self.index.vocab:
+        for term in self.index.tokens:
             df = len(self.index.inverted_index.get(term, []))
             idf[term] = math.log((N - df + 0.5) / (df + 0.5) + 1)
         return idf
@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     retriever = BM25Retriever(corpus)
 
-    print("Vocab:", retriever.index.vocab)
+    print("Vocab:", retriever.index.tokens)
     print("BM25 row 0:", retriever.score_matrix[0])
 
     query = "Do que gatos e cachorros gostam ?"

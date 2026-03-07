@@ -34,7 +34,7 @@ class BaseRetriever(ABC):
 
         candidate_doc_ids = set()
         for term in preproc_query:
-            if term in self.index.tokenize:
+            if term in self.index.tokens:
                 candidate_doc_ids.update(
                     self.index.inverted_index.get(term, []))
 

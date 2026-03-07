@@ -17,7 +17,7 @@ class TFIDFRetriever(BaseRetriever):
 
         for doc_id in range(M):
             for term in set(self.index.preprocessed[doc_id]):
-                term_index = self.index.tokenize[term]
+                term_index = self.index.tokens[term]
                 count = self.index.count_matrix[doc_id, term_index]
                 score_matrix[doc_id, term_index] = self._compute_tf(count) * self.idf[term]
 
@@ -27,9 +27,9 @@ class TFIDFRetriever(BaseRetriever):
         counts = Counter(tokens)
         vector = np.zeros([1, self.index.n_vocab])
         for term, count in counts.items():
-            if term in self.index.tokenize:
+            if term in self.index.tokens:
                 tfidf_term = self._compute_tf(count) * self.idf[term]
-                vector[0, self.index.tokenize[term]] = tfidf_term
+                vector[0, self.index.tokens[term]] = tfidf_term
         return vector
 
     def _compute_tf(self, count: int) -> float:
@@ -42,7 +42,7 @@ class TFIDFRetriever(BaseRetriever):
         """IDF = log10(N / df) for each term in the vocabulary."""
         N = self.index.n_docs
         idf = {}
-        for term in self.index.vocab:
+        for term in self.index.tokens:
             df = len(self.index.inverted_index.get(term, []))
             idf[term] = math.log10(N / df) if df > 0 else 0.0
         return idf
@@ -53,7 +53,7 @@ if __name__ == "__main__":
 
     retriever = TFIDFRetriever(corpus)
 
-    print("Vocab:", retriever.index.vocab)
+    print("Vocab:", retriever.index.tokens)
     print("TF-IDF row 0:", retriever.score_matrix[0])
 
     query = "Do que gatos e cachorros gostam ?"
