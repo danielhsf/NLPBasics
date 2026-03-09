@@ -1,21 +1,24 @@
 import re
-import numpy as np
+from collections import Counter
 
 
 class CorpusIndex:
-    """Stores all corpus structure: tokens, vocab, raw counts, inverted index.
+    """Stores all corpus structure: tokens, vocab, inverted index with TF, doc lengths.
 
     This class owns only structural logic — preprocessing, vocabulary building,
-    raw term counts, and the inverted index. Scoring is left to retriever classes.
+    and the inverted index. Scoring is left to retriever classes.
+
+    The inverted index maps each term to a list of (doc_id, tf) pairs, enabling
+    scalable retrieval without materializing a full document-term matrix.
     """
 
     def __init__(self, corpus: list[str]):
         self.token_pattern = r'\b\w+\b'
         self.preprocessed = self.preprocess(corpus)
         self.tokens = self.build_vocab(self.preprocessed)
-        self.count_matrix = self.build_count_matrix()
         self.inverted_index = self.build_inverted_index()
-        self.avg_doc_length = self._compute_avg_doc_length()
+        self.doc_lengths = [len(doc) for doc in self.preprocessed]
+        self.avg_doc_length = sum(self.doc_lengths) / len(self.doc_lengths) if self.doc_lengths else 0.0
 
     def preprocess(self, corpus: list[str]) -> list[list[str]]:
         preprocessed_corpus = []
@@ -29,31 +32,17 @@ class CorpusIndex:
         for document in preprocessed:
             for word in document:
                 vocab_set.add(word)
-
         return {word: i for i, word in enumerate(sorted(vocab_set))}
 
-    def build_count_matrix(self) -> np.ndarray:
-        """Builds an M×N matrix of raw integer term counts."""
-        M = len(self.preprocessed)
-        N = len(self.tokens)
-        count_matrix = np.zeros([M, N], dtype=int)
-        for doc_id, document in enumerate(self.preprocessed):
-            for term in document:
-                term_index = self.tokens[term]
-                count_matrix[doc_id, term_index] += 1
-        return count_matrix
-
-    def build_inverted_index(self) -> dict[str, list[int]]:
+    def build_inverted_index(self) -> dict[str, list[tuple[int, int]]]:
+        """Builds an inverted index mapping each term to [(doc_id, tf), ...] pairs."""
         inverted_index = {}
         for doc_id, document in enumerate(self.preprocessed):
-            for term in set(document):
+            for term, tf in Counter(document).items():
                 if term not in inverted_index:
                     inverted_index[term] = []
-                inverted_index[term].append(doc_id)
+                inverted_index[term].append((doc_id, tf))
         return inverted_index
-
-    def _compute_avg_doc_length(self) -> float:
-        return float(np.mean([len(doc) for doc in self.preprocessed]))
 
     @property
     def n_docs(self) -> int:

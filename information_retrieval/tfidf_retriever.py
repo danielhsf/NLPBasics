@@ -1,60 +1,43 @@
 import math
-import numpy as np
-from collections import Counter
 from base_retriever import BaseRetriever
 from corpus import dataset_IR_v1
 
 
 class TFIDFRetriever(BaseRetriever):
-    """Retriever using log-normalized TF × IDF scoring with cosine similarity."""
+    """Retriever using log-normalized TF × IDF scoring with dot-product ranking.
 
-    def build_score_matrix(self) -> np.ndarray:
-        """Build an M×N TF-IDF matrix. Sets self.idf as a side-effect."""
-        self.idf = self._compute_idf()
-        M = self.index.n_docs
-        N = self.index.n_vocab
-        score_matrix = np.zeros([M, N])
+    Score contribution of term t in document d for query q:
+        tf_idf(t, q) × tf_idf(t, d)
 
-        for doc_id in range(M):
-            for term in set(self.index.preprocessed[doc_id]):
-                term_index = self.index.tokens[term]
-                count = self.index.count_matrix[doc_id, term_index]
-                score_matrix[doc_id, term_index] = self._compute_tf(count) * self.idf[term]
+    where tf_idf(t, x) = (1 + log10(tf(t, x))) × log10(N / df(t))
 
-        return score_matrix
+    Scoring is done term-at-a-time over posting lists; no full matrix is built.
+    """
 
-    def vectorize_query(self, tokens: list[str]) -> np.ndarray:
-        counts = Counter(tokens)
-        vector = np.zeros([1, self.index.n_vocab])
-        for term, count in counts.items():
-            if term in self.index.tokens:
-                tfidf_term = self._compute_tf(count) * self.idf[term]
-                vector[0, self.index.tokens[term]] = tfidf_term
-        return vector
+    def _precompute(self):
+        """Precompute IDF for all vocabulary terms."""
+        N = self.index.n_docs
+        self.idf: dict[str, float] = {}
+        for term, postings in self.index.inverted_index.items():
+            df = len(postings)
+            self.idf[term] = math.log10(N / df) if df > 0 else 0.0
+
+    def _score_posting(self, term: str, query_tokens: list[str], doc_id: int, tf: int) -> float:
+        """TF-IDF dot-product score contribution of term t in document doc_id."""
+        query_tf = query_tokens.count(term)
+        doc_score = self._compute_tf(tf) * self.idf[term]
+        query_score = self._compute_tf(query_tf) * self.idf[term]
+        return query_score * doc_score
 
     def _compute_tf(self, count: int) -> float:
         """Log-normalized TF: 1 + log10(count), or 0 if count is 0."""
-        if count == 0:
-            return 0.0
-        return 1 + math.log10(count)
-
-    def _compute_idf(self) -> dict[str, float]:
-        """IDF = log10(N / df) for each term in the vocabulary."""
-        N = self.index.n_docs
-        idf = {}
-        for term in self.index.tokens:
-            df = len(self.index.inverted_index.get(term, []))
-            idf[term] = math.log10(N / df) if df > 0 else 0.0
-        return idf
+        return 0.0 if count == 0 else 1 + math.log10(count)
 
 
 if __name__ == "__main__":
     corpus = dataset_IR_v1
 
     retriever = TFIDFRetriever(corpus)
-
-    print("Vocab:", retriever.index.tokens)
-    print("TF-IDF row 0:", retriever.score_matrix[0])
 
     query = "Do que gatos e cachorros gostam ?"
     answers = retriever.retrieve(query, top_k=2)

@@ -1,74 +1,44 @@
 from abc import ABC, abstractmethod
-import numpy as np
 from index import CorpusIndex
 
 
 class BaseRetriever(ABC):
-    """Abstract base class for corpus retrievers.
+    """Abstract base class for scalable corpus retrievers.
 
-    Implements the retrieve() template method. Subclasses must provide
-    build_score_matrix() and vectorize_query() to define their scoring model.
+    Uses term-at-a-time (TAAT) scoring: for each query term, iterates over its
+    posting list and accumulates scores per document. Only documents sharing at
+    least one term with the query are scored, avoiding full matrix operations.
+
+    Subclasses must implement:
+      - _precompute(): compute term statistics (e.g., IDF) after index is built.
+      - _score_posting(): score contribution of one (term, document) posting.
     """
 
     def __init__(self, corpus: list[str]):
         self.index = CorpusIndex(corpus)
-        self.score_matrix = self.build_score_matrix()
+        self._precompute()
 
     @abstractmethod
-    def build_score_matrix(self) -> np.ndarray:
-        """Build an M×N weighted document-term matrix."""
+    def _precompute(self):
+        """Precompute term statistics needed for scoring (e.g., IDF)."""
         pass
 
     @abstractmethod
-    def vectorize_query(self, tokens: list[str]) -> np.ndarray:
-        """Convert preprocessed query tokens into a (1×N) query vector."""
+    def _score_posting(self, term: str, query_tokens: list[str], doc_id: int, tf: int) -> float:
+        """Score contribution of term appearing in doc_id with frequency tf."""
         pass
 
-    def retrieve(self, query: str, top_k: int = 2) -> list[tuple]:
-        """Retrieve top-k documents for a query using cosine similarity.
+    def retrieve(self, query: str, top_k: int = 10) -> list[tuple]:
+        """Retrieve top-k documents for a query using TAAT score accumulation.
 
-        Pipeline: preprocess → candidate filtering via inverted index →
-        vectorize_query → cosine similarity → top-k ranking.
+        Pipeline: preprocess → iterate posting lists → accumulate scores → top-k.
         """
-        preproc_query = self.index.preprocess([query])[0]
+        tokens = self.index.preprocess([query])[0]
 
-        candidate_doc_ids = set()
-        for term in preproc_query:
-            if term in self.index.tokens:
-                candidate_doc_ids.update(
-                    self.index.inverted_index.get(term, []))
+        scores: dict[int, float] = {}
+        for term in set(tokens):
+            for doc_id, tf in self.index.inverted_index.get(term, []):
+                scores[doc_id] = scores.get(doc_id, 0.0) + self._score_posting(term, tokens, doc_id, tf)
 
-        if not candidate_doc_ids:
-            return []
-
-        candidate_ids = list(candidate_doc_ids)
-        query_vector = self.vectorize_query(preproc_query)
-        candidate_matrix = self.score_matrix[candidate_ids]
-        similarities = self._cosine_similarity(query_vector, candidate_matrix.T)[0]
-
-        idx = np.argsort(similarities)
-
-        answers = []
-        for i in range(min(top_k, len(candidate_ids))):
-            doc_id = candidate_ids[idx[-(i + 1)]]
-            answers.append(
-                (" ".join(self.index.preprocessed[doc_id]),
-                 similarities[idx[-(i + 1)]]))
-
-        return answers
-
-    def _cosine_similarity(self, vector: np.ndarray, matrix: np.ndarray) -> np.ndarray:
-        """Cosine similarity between a (1×N) vector and a (N×K) matrix.
-
-        Returns a (1×K) array of similarity scores, one per column.
-        """
-        dot_product = np.dot(vector, matrix)
-        magnitude_vec = np.linalg.norm(vector)
-        magnitude_cols = np.linalg.norm(matrix, axis=0)
-
-        if magnitude_vec == 0:
-            return np.zeros_like(dot_product)
-
-        denominator = magnitude_vec * magnitude_cols
-        denominator = np.where(denominator == 0, 1e-10, denominator)
-        return dot_product / denominator
+        ranked = sorted(scores.items(), key=lambda x: -x[1])[:top_k]
+        return [(" ".join(self.index.preprocessed[doc_id]), score) for doc_id, score in ranked]

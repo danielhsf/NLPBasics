@@ -6,4 +6,5 @@ dependencies = [
     "numpy>=2.0",
     "scikit-learn>=1.8",
     "ipykernel>=7.0",
+    "datasets==4.7.0",
 ]
